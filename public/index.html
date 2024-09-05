@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudyZ</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="content-wrapper">
+
+    <div id="loader" class="loader-container">
+        <div class="loader"></div>
+      </div>
+    <div class="container">
+        <h1>StudyZ (Study Easy)</h1> 
+        <form id="topic-form">
+            <label for="topic">Enter Your Topic:</label>
+            <input type="text" id="topic" name="topic" required>
+            
+            <label for="grade">Enter Your Grade Level:</label>
+            <select id="grade" name="grade">
+                <option value="">Select a grade level</option>
+                <option value="Elementary">Elementary</option>
+                <option value="Middle School">Middle School</option>
+                <option value="High School">High School</option>
+                <option value="College">College</option>
+            </select>
+            
+            <button type="submit">Generate Pathway</button>
+        </form>
+
+        <div id="grade-section" style="display: none;">
+            <h2>Select a Grade Level</h2>
+            <div class="grade-buttons">
+                <button class="grade-btn" data-grade="Elementary">Elementary</button>
+                <button class="grade-btn" data-grade="Middle School">Middle School</button>
+                <button class="grade-btn" data-grade="High School">High School</button>
+                <button class="grade-btn" data-grade="College">College</button>
+            </div>
+        </div>
+
+        <div id="pathway-section" style="display: none;">
+            <h2>Study Pathway</h2>
+            <div id="pathway-timeline"></div>
+        </div>
+
+        
+    </div>
+    <script src="script.js"></script>
+    <footer class="footer">
+        <p>Made by Pratham | &copy; 2024 All Rights Reserved</p>
+        <p>Visit my <a href="https://prathamrajsinha.com" target="_blank" rel="noopener noreferrer">portfolio</a></p>
+    </footer>
+    </div>
+</body>
+</html>

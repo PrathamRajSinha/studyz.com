@@ -1,0 +1,19 @@
+{
+  "name": "studyz",
+  "version": "1.0.0",
+  "description": "A study pathway generator",
+  "main": "server-local.js",
+  "scripts": {
+    "start": "node server-local.js",
+    "dev": "nodemon server-local.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.1.3",
+    "axios": "^1.6.2",
+    "express": "^4.18.2",
+    "googleapis": "^129.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
