@@ -1,11 +1,31 @@
 {
     "version": 2,
     "builds": [
-      { "src": "api/*.js", "use": "@vercel/node" },
-      { "src": "public/**", "use": "@vercel/static" }
+      {
+        "src": "server/server.js",
+        "use": "@vercel/node"
+      },
+      {
+        "src": "public/**",
+        "use": "@vercel/static"
+      }
     ],
     "routes": [
-      { "src": "/api/(.*)", "dest": "/api/$1" },
-      { "src": "/(.*)", "dest": "/public/$1" }
+      {
+        "src": "/study-pathway",
+        "dest": "server/server.js"
+      },
+      {
+        "src": "/initiate-content-generation",
+        "dest": "server/server.js"
+      },
+      {
+        "src": "/check-content-status",
+        "dest": "server/server.js"
+      },
+      {
+        "src": "/(.*)",
+        "dest": "public/$1"
+      }
     ]
   }
