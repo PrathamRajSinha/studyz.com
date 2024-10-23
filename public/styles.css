@@ -397,3 +397,19 @@ button:active {
     70% { opacity: 1; }
     100% { opacity: 0; }
 }
+.error-message {
+    background-color: #fff3f3;
+    border: 1px solid #ffcdd2;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+    color: #d32f2f;
+}
+
+.error-details {
+    font-family: monospace;
+    background-color: #fafafa;
+    padding: 10px;
+    border-radius: 4px;
+    margin-top: 10px;
+}

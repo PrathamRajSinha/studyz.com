@@ -217,38 +217,21 @@ async function generateStudyPathwayStage(topic, grade, stageNumber) {
   }
 }
 
+// In server.js, modify the generateStudyPathway function:
 async function generateStudyPathway(topic, grade) {
   const cacheKey = `pathway_${topic}_${grade}`;
   const cachedPathway = cache.get(cacheKey);
   if (cachedPathway) {
-      console.log('Returning cached pathway:', cachedPathway);
       return cachedPathway;
   }
 
   try {
-      console.log('Generating pathway for:', { topic, grade });
       const stages = await Promise.all([
           generateStudyPathwayStage(topic, grade, 1),
           generateStudyPathwayStage(topic, grade, 2),
           generateStudyPathwayStage(topic, grade, 3)
       ]);
-      
-      console.log('Generated stages:', stages);
-      
-      // Ensure all stages are present and in order
-      const orderedStages = stages
-          .filter(stage => stage) // Remove any null/undefined stages
-          .map((stage, index) => {
-              // If stage doesn't start with <h2>, wrap it
-              if (!stage.includes('<h2>')) {
-                  return `<h2>Stage ${index + 1}: Learning Path</h2>${stage}`;
-              }
-              return stage;
-          });
-
-      console.log('Ordered stages:', orderedStages);
-      
-      const pathway = orderedStages.join('\n');
+      const pathway = stages.join('\n');
       cache.set(cacheKey, pathway);
       return pathway;
   } catch (error) {
@@ -256,6 +239,8 @@ async function generateStudyPathway(topic, grade) {
       return '<div class="study-pathway">Error generating study pathway. Please try again.</div>';
   }
 }
+
+
 
 async function generateAINotes(topic, grade, stage) {
     const prompt = `
@@ -529,18 +514,19 @@ async function generateContent(taskId, topic, grade, type, stage) {
     }
 }
 
+// Modify the study-pathway route:
 app.get('/study-pathway', async (req, res) => {
-    const { topic, grade } = req.query;
-    if (!topic || !grade) {
-        return res.status(400).send('Topic and grade are required.');
-    }
-    try {
-        const pathway = await generateStudyPathway(topic, grade);
-        res.send(pathway);
-    } catch (error) {
-        console.error('Error in /study-pathway:', error);
-        res.status(500).send(`Error generating study pathway: ${error.message}`);
-    }
+  const { topic, grade } = req.query;
+  if (!topic || !grade) {
+      return res.status(400).send('Topic and grade are required.');
+  }
+  try {
+      const pathway = await generateStudyPathway(topic, grade);
+      res.send(pathway);
+  } catch (error) {
+      console.error('Error in /study-pathway:', error);
+      res.status(500).send('Error generating study pathway. Please try again.');
+  }
 });
 
 // Catch-all route to serve index.html for any unmatched routes

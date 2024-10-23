@@ -163,6 +163,7 @@ if (pdfUploadForm) {
 
     async function generatePathway() {
         try {
+            showLoader();
             const pathway = await fetchPathway(currentTopic, currentGrade);
             const timelineHTML = createTimelineHTML(pathway);
             const pathwayTimelineElement = document.getElementById('pathway-timeline');
@@ -176,9 +177,17 @@ if (pdfUploadForm) {
             console.error('Error generating pathway:', error);
             const pathwayTimelineElement = document.getElementById('pathway-timeline');
             if (pathwayTimelineElement) {
-                pathwayTimelineElement.innerHTML = `<p class="error">Error generating pathway: ${error.message}. Please try again later.</p>`;
+                pathwayTimelineElement.innerHTML = `
+                    <div class="error-message">
+                        <p>Sorry, we encountered an error while generating your pathway.</p>
+                        <p>Please try again in a few moments.</p>
+                        <p class="error-details">Error: ${error.message}</p>
+                    </div>
+                `;
             }
             if (pathwaySection) pathwaySection.style.display = 'block';
+        } finally {
+            hideLoader();
         }
     }
 
@@ -205,12 +214,12 @@ if (pdfUploadForm) {
                 throw new Error(`HTTP error! status: ${initiateResponse.status}`);
             }
             const { taskId } = await initiateResponse.json();
-
+    
             let content = await pollContent(taskId);
             contentOutputDiv.innerHTML = content;
         } catch (error) {
             console.error('Error fetching content:', error);
-            contentOutputDiv.innerHTML = '<p class="error">Error fetching content. Please try again.</p>';
+            contentOutputDiv.innerHTML = `<p class="error">Error: ${error.message}. Please try again.</p>`;
         }
     }
 

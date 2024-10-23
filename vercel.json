@@ -4,28 +4,24 @@
     {
       "src": "server/server.js",
       "use": "@vercel/node"
-    },
-    {
-      "src": "public/**",
-      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/study-pathway(.*)",
-      "dest": "/server/server.js"
+      "src": "/study-pathway",
+      "dest": "server/server.js"
     },
     {
-      "src": "/initiate-content-generation(.*)",
-      "dest": "/server/server.js"
+      "src": "/initiate-content-generation",
+      "dest": "server/server.js"
     },
     {
-      "src": "/check-content-status(.*)",
-      "dest": "/server/server.js"
+      "src": "/check-content-status",
+      "dest": "server/server.js"
     },
     {
       "src": "/(.*)",
-      "dest": "/public/$1"
+      "dest": "server/server.js"
     }
   ]
 }
