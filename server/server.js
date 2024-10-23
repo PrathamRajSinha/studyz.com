@@ -130,57 +130,123 @@ app.post('/upload-pdf', function(req, res) {
 });
 
 async function generateStudyPathwayStage(topic, grade, stageNumber) {
-    const prompt = `
-        Create a single stage for a study pathway on the topic "${topic}" at the "${grade}" level.
-        This should be stage number ${stageNumber} of a 3 to 5-stage pathway.
-        Use the following structure:
-        use <b> to bold any subtopics or topics.
-        <h2>Stage ${stageNumber}: [Stage Name]</h2>
-        <h3>Foundational Skills</h3>
-        <ul>
-            <li>[Skill 1]</li>
-            <li>[Skill 2]</li>
-        </ul>
-        <h3>Core Topics</h3>
-        <ul>
-            <li>[Topic 1]</li>
-            <li>[Topic 2]</li>
-        </ul>
-        <h3>Learning Activities</h3>
-        <ul>
-            <li>[Activity 1]</li>
-            <li>[Activity 2]</li>
-        </ul>
-
-        Keep the response under 500 characters.
+  // Dynamic complexity analysis function
+  async function analyzeTopicComplexity(topic, grade) {
+    const analysisPrompt = `
+      Analyze the complexity of teaching "${topic}" at "${grade}" level.
+      Consider:
+      1. Conceptual depth (abstract vs concrete concepts)
+      2. Prerequisites needed
+      3. Technical vocabulary density
+      4. Mathematical or logical reasoning requirements
+      5. Interconnectedness with other subjects
+      6. Need for spatial/visual understanding
+      7. Critical thinking demands
+      
+      Return only a JSON object with these properties:
+      {
+        "complexityScore": [number between 1-10],
+        "conceptualDepth": [number between 1-10],
+        "prerequisiteLevel": [number between 1-10],
+        "technicalDensity": [number between 1-10],
+        "recommendedSubtopics": [number between 2-6],
+        "recommendedActivities": [number between 2-6]
+      }
     `;
 
-    const retryOptions = {
-        maxRetries: 3,
-        retryDelay: 1000,
-        timeout: 30000
-    };
-
-    for (let attempt = 1; attempt <= retryOptions.maxRetries; attempt++) {
-        try {
-            const result = await Promise.race([
-                model.generateContent(prompt),
-                new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Request timeout')), retryOptions.timeout)
-                )
-            ]);
-            
-            const response = await result.response;
-            const text = await response.text();
-            return text;
-        } catch (error) {
-            console.error(`Attempt ${attempt} failed:`, error);
-            if (attempt === retryOptions.maxRetries) {
-                throw error;
-            }
-            await new Promise(resolve => setTimeout(resolve, retryOptions.retryDelay));
-        }
+    try {
+      const result = await model.generateContent(analysisPrompt);
+      const response = await result.response;
+      const analysis = JSON.parse(response.text());
+      return analysis;
+    } catch (error) {
+      console.error('Error analyzing topic complexity:', error);
+      return {
+        complexityScore: 5,
+        conceptualDepth: 5,
+        prerequisiteLevel: 5,
+        technicalDensity: 5,
+        recommendedSubtopics: 3,
+        recommendedActivities: 3
+      };
     }
+  }
+
+  // Get dynamic complexity analysis
+  const analysis = await analyzeTopicComplexity(topic, grade);
+  
+  const prompt = `
+    Generate Stage ${stageNumber} of a sophisticated study pathway for "${topic}" at "${grade}" level.
+    Based on complexity analysis:
+    - Overall Complexity: ${analysis.complexityScore}/10
+    - Conceptual Depth: ${analysis.conceptualDepth}/10
+    - Prerequisites: ${analysis.prerequisiteLevel}/10
+    - Technical Density: ${analysis.technicalDensity}/10
+    
+    Required Structure:
+    1. Stage Title: Create a descriptive title that represents this learning phase
+       <h2>Stage ${stageNumber}: [Your Stage Title]</h2>
+       
+    2. Foundational Skills:
+       <h3>Foundational Skills</h3>
+       <ul>
+       [${Math.max(2, Math.floor(analysis.prerequisiteLevel/2))} skills needed]
+       - Complexity matches analysis scores
+       - Use <b>tags</b> for key terms
+       - Skills should be measurable and clear
+       - Align with conceptual depth score
+       </ul>
+       
+    3. Core Topics:
+       <h3>Core Topics</h3>
+       <ul>
+       [${analysis.recommendedSubtopics} topics]
+       - Match technical density score
+       - Use <b>tags</b> for technical terms
+       - Depth aligns with complexity score
+       - Clear progression between topics
+       </ul>
+       
+    4. Learning Activities:
+       <h3>Learning Activities</h3>
+       <ul>
+       [${analysis.recommendedActivities} activities]
+       - Activities match complexity level
+       - Mix of learning approaches based on:
+         * Conceptual depth score: ${analysis.conceptualDepth}/10
+         * Technical density: ${analysis.technicalDensity}/10
+       - Include practical applications
+       - Vary difficulty within grade level
+       </ul>
+
+    Stage-Specific Guidelines:
+    - If Stage 1: Focus on foundational concepts, regardless of complexity
+    - If Middle Stage: Balance theory and application
+    - If Final Stage: Emphasize practical application and integration
+    
+    Content Calibration:
+    - Adjust language to ${grade} level while maintaining technical accuracy
+    - Scale examples to match complexity scores
+    - Ensure prerequisites align with stage number
+    - Activities should reflect both complexity and grade level
+    
+    Remember:
+    - Keep total response under 500 characters
+    - Maintain exact HTML formatting
+    - Content must be specific to ${topic}
+    - Align with ${grade} curriculum standards
+    - Consider cognitive load based on complexity scores
+    `;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = await response.text();
+    return text;
+  } catch (error) {
+    console.error(`Error generating stage ${stageNumber}:`, error);
+    return `<div class="study-pathway">Error generating stage ${stageNumber}. Please try again.</div>`;
+  }
 }
 
 async function generateStudyPathway(topic, grade) {
