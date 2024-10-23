@@ -8,18 +8,6 @@
   ],
   "routes": [
     {
-      "src": "/study-pathway",
-      "dest": "server/server.js"
-    },
-    {
-      "src": "/initiate-content-generation",
-      "dest": "server/server.js"
-    },
-    {
-      "src": "/check-content-status",
-      "dest": "server/server.js"
-    },
-    {
       "src": "/(.*)",
       "dest": "server/server.js"
     }

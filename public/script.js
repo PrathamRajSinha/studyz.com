@@ -193,18 +193,27 @@ if (pdfUploadForm) {
 
     async function fetchPathway(topic, grade) {
         console.log(`Fetching pathway for topic: ${topic}, grade: ${grade}`);
-        const response = await fetch(`/study-pathway?topic=${encodeURIComponent(topic)}&grade=${encodeURIComponent(grade)}`);
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Error response:', errorText);
-            throw new Error(errorText || `HTTP error! status: ${response.status}`);
+        try {
+            const response = await fetch(`/study-pathway?topic=${encodeURIComponent(topic)}&grade=${encodeURIComponent(grade)}`, {
+                timeout: 8000  // 8 second timeout
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.text();
+            console.log('Received pathway data:', data.substring(0, 100) + '...'); 
+            
+            if (!data || data.includes('Error generating study pathway')) {
+                throw new Error(data || 'Empty response received');
+            }
+            
+            return data;
+        } catch (error) {
+            console.error('Fetch error:', error);
+            throw new Error(`Failed to fetch pathway: ${error.message}`);
         }
-        const data = await response.text();
-        console.log('Received pathway data:', data.substring(0, 100) + '...'); // Log first 100 characters
-        if (data.includes('Error generating study pathway')) {
-            throw new Error(data);
-        }
-        return data;
     }
 
     async function fetchContent(topic, grade, contentType, stage, contentOutputDiv) {
@@ -214,12 +223,12 @@ if (pdfUploadForm) {
                 throw new Error(`HTTP error! status: ${initiateResponse.status}`);
             }
             const { taskId } = await initiateResponse.json();
-    
+
             let content = await pollContent(taskId);
             contentOutputDiv.innerHTML = content;
         } catch (error) {
             console.error('Error fetching content:', error);
-            contentOutputDiv.innerHTML = `<p class="error">Error: ${error.message}. Please try again.</p>`;
+            contentOutputDiv.innerHTML = '<p class="error">Error fetching content. Please try again.</p>';
         }
     }
 

@@ -6,7 +6,6 @@ const axios = require('axios');
 const NodeCache = require('node-cache');
 const multer = require('multer');
 const pdf = require('pdf-parse');
-const fs = require('fs');
 const cors = require('cors');
 
 const app = express();
@@ -14,22 +13,18 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.json());
-const cache = new NodeCache({ stdTTL: 600 }); // Cache for 10 minutes
+const cache = new NodeCache({ stdTTL: 600 }); 
 
-// API key setup - using your provided key
 const API_KEY = "AIzaSyBLvP6wb7dV3myixOOb5lqZLFm5ePrdP6U";
 
-// Google Generative AI setup
 const genAI = new GoogleGenerativeAI(API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
-// YouTube API setup
 const youtube = google.youtube({
     version: 'v3',
     auth: API_KEY
 });
 
-// Configure multer with memory storage
 const upload = multer({
     storage: multer.memoryStorage(),
     fileFilter: (req, file, cb) => {
@@ -40,7 +35,7 @@ const upload = multer({
         }
     },
     limits: {
-        fileSize: 50 * 1024 * 1024 // 50MB limit
+        fileSize: 50 * 1024 * 1024 
     }
 }).single('pdf');
 
@@ -136,7 +131,6 @@ app.post('/upload-pdf', (req, res) => {
 
               console.log('Processed Analysis:', analysis);
 
-              // Add the text preview and page count
               analysis.textPreview = pdfData.text.substring(0, 200);
               analysis.numPages = pdfData.numpages;
 
@@ -204,7 +198,6 @@ async function generateStudyPathwayStage(topic, grade, stageNumber) {
       const response = await result.response;
       const text = await response.text();
       
-      // Clean up any remaining asterisks
       const cleanedText = text
           .replace(/\*\*/g, '')
           .replace(/\*/g, '')
@@ -217,7 +210,6 @@ async function generateStudyPathwayStage(topic, grade, stageNumber) {
   }
 }
 
-// In server.js, modify the generateStudyPathway function:
 async function generateStudyPathway(topic, grade) {
   const cacheKey = `pathway_${topic}_${grade}`;
   const cachedPathway = cache.get(cacheKey);
@@ -239,8 +231,6 @@ async function generateStudyPathway(topic, grade) {
       return '<div class="study-pathway">Error generating study pathway. Please try again.</div>';
   }
 }
-
-
 
 async function generateAINotes(topic, grade, stage) {
     const prompt = `
@@ -481,9 +471,8 @@ app.get('/initiate-content-generation', async (req, res) => {
         return res.status(400).send('Topic, grade, content type, and stage are required.');
     }
     const taskId = `${type}_${Date.now()}`;
-    cache.set(taskId, 'pending', 300); // Set initial status as pending, expire in 5 minutes
+    cache.set(taskId, 'pending', 300); 
     
-    // Start the content generation process asynchronously
     generateContent(taskId, topic, grade, type, stage).catch(console.error);
     
     res.json({ taskId });
@@ -514,24 +503,18 @@ async function generateContent(taskId, topic, grade, type, stage) {
     }
 }
 
-// Modify the study-pathway route:
 app.get('/study-pathway', async (req, res) => {
-  const { topic, grade } = req.query;
-  if (!topic || !grade) {
-      return res.status(400).send('Topic and grade are required.');
-  }
-  try {
-      const pathway = await generateStudyPathway(topic, grade);
-      res.send(pathway);
-  } catch (error) {
-      console.error('Error in /study-pathway:', error);
-      res.status(500).send('Error generating study pathway. Please try again.');
-  }
-});
-
-// Catch-all route to serve index.html for any unmatched routes
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/index.html'));
+    const { topic, grade } = req.query;
+    if (!topic || !grade) {
+        return res.status(400).send('Topic and grade are required.');
+    }
+    try {
+        const pathway = await generateStudyPathway(topic, grade);
+        res.send(pathway);
+    } catch (error) {
+        console.error('Error in /study-pathway:', error);
+        res.status(500).send('Error generating study pathway. Please try again.');
+    }
 });
 
 // Error handling middleware
@@ -540,27 +523,15 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Internal server error' });
 });
 
-// For local development
-if (process.env.NODE_ENV === 'production') {
-  app.get('*', (req, res) => {
-    if (req.url.startsWith('/api/')) {
-      res.status(404).send('API route not found');
-    } else {
-      res.sendFile(path.join(__dirname, '../public/index.html'));
-    }
-  });
-} else {
-  app.get('*', (req, res) => {
+app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
-  });
-}
+});
 
-// Local development server code should stay after the routes
 if (process.env.NODE_ENV !== 'production') {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
+    });
 }
 
 module.exports = app;
