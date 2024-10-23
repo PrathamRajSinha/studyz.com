@@ -3,23 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StudyZ</title>
+    <title>StudyZ - Study Easy</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="content-wrapper">
-
     <div id="loader" class="loader-container">
         <div class="loader"></div>
-      </div>
+    </div>
+
     <div class="container">
-        <h1>StudyZ (Study Easy)</h1> 
+        <h1>StudyZ (Study Easy)</h1>
+
         <form id="topic-form">
             <label for="topic">Enter Your Topic:</label>
             <input type="text" id="topic" name="topic" required>
             
-            <label for="grade">Enter Your Grade Level:</label>
-            <select id="grade" name="grade">
+            <label for="grade">Select Grade Level:</label>
+            <select id="grade" name="grade" required>
                 <option value="">Select a grade level</option>
                 <option value="Elementary">Elementary</option>
                 <option value="Middle School">Middle School</option>
@@ -30,20 +31,32 @@
             <button type="submit">Generate Pathway</button>
         </form>
 
-
+        <div class="upload-section">
+            <h1>⚠️ Work in progress</h1>
+            <h2>Upload a PDF</h2>
+            <form id="pdf-upload-form" enctype="multipart/form-data">
+                <div class="upload-controls">
+                    <input type="file" id="pdf-file" name="pdf" accept=".pdf" required>
+                    <div class="button-group">
+                        <button type="submit">Upload and Analyze</button>
+                        <button type="button" id="clear-content" class="clear-btn">Clear Content</button>
+                    </div>
+                </div>
+            </form>
+            <div id="pdf-analysis-result" style="display: none;"></div>
+        </div>
 
         <div id="pathway-section" style="display: none;">
             <h2>Study Pathway</h2>
             <div id="pathway-timeline"></div>
         </div>
-
-        
     </div>
-    <script src="script.js"></script>
+
     <footer class="footer">
-        <p>Made by Pratham | &copy; 2024 All Rights Reserved</p>
+        <p>Made by Pratham | © 2024 All Rights Reserved</p>
         <p>Visit my <a href="https://prathamrajsinha.com" target="_blank" rel="noopener noreferrer">portfolio</a></p>
     </footer>
-    </div>
+
+    <script src="script.js"></script>
 </body>
 </html>

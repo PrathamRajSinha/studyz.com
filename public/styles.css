@@ -23,136 +23,6 @@ body {
 
 h1, h2 {
     color: #2c3e50;
-}
-
-form {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-bottom: 20px;
-}
-
-input, select, button {
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-}
-
-button {
-    background-color: #3498db;
-    color: white;
-    border: none;
-    cursor: pointer;
-    transition: background-color 0.3s;
-}
-
-button:hover {
-    background-color: #2980b9;
-}
-
-#pathway-timeline {
-    margin-top: 20px;
-}
-
-.timeline-item {
-    background-color: #fff;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 15px;
-    margin-bottom: 20px;
-}
-
-.timeline-item h3 {
-    color: #2c3e50;
-    margin-top: 0;
-}
-
-.content-section {
-    display: flex;
-    gap: 10px;
-    margin-top: 15px;
-}
-
-.content-btn {
-    background-color: #2ecc71;
-    color: white;
-    border: none;
-    padding: 5px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.3s;
-}
-
-.content-btn:hover {
-    background-color: #27ae60;
-}
-
-.content-output {
-    margin-top: 15px;
-    background-color: #ecf0f1;
-    padding: 10px;
-    border-radius: 4px;
-}
-
-#ai-content {
-    background-color: #fff;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 15px;
-    margin-top: 20px;
-}
-
-.ai-content {
-    background-color: #f9f9f9;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    padding: 15px;
-    margin-top: 15px;
-}
-
-.ai-content h3 {
-    color: #2c3e50;
-    margin-top: 20px;
-    margin-bottom: 10px;
-}
-
-.ai-content p {
-    margin-bottom: 10px;
-}
-
-.ai-content ul, .ai-content ol {
-    margin-bottom: 10px;
-    padding-left: 20px;
-}
-
-.ai-content li {
-    margin-bottom: 5px;
-}
-
-body {
-    font-family: 'Roboto', Arial, sans-serif;
-    line-height: 1.6;
-    color: #333;
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 20px;
-    background-color: #f0f4f8;
-}
-
-.container {
-    background-color: #ffffff;
-    border-radius: 8px;
-    padding: 30px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    transition: all 0.3s ease;
-}
-
-.container:hover {
-    box-shadow: 0 6px 8px rgba(0,0,0,0.15);
-}
-
-h1, h2 {
-    color: #2c3e50;
     margin-bottom: 20px;
 }
 
@@ -279,23 +149,23 @@ button:active {
     z-index: 1000;
     justify-content: center;
     align-items: center;
-  }
-  
-  .loader {
+}
+
+.loader {
     border: 4px solid #f3f3f3;
     border-top: 4px solid #3498db;
     border-radius: 50%;
     width: 40px;
     height: 40px;
     animation: spin 1s linear infinite;
-  }
-  
-  @keyframes spin {
+}
+
+@keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
-  }
+}
 
-  .footer {
+.footer {
     text-align: center;
     padding: 20px;
     background-color: rgba(255, 255, 255, 0.9);
@@ -314,4 +184,216 @@ button:active {
 .footer a:hover {
     color: #2980b9;
     text-decoration: underline;
+}
+
+.upload-section {
+    margin: 20px 0;
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.upload-section h2 {
+    margin-bottom: 15px;
+    color: #2c3e50;
+}
+
+#pdf-upload-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#pdf-analysis-result {
+    margin-top: 15px;
+    padding: 10px;
+    background-color: #e9ecef;
+    border-radius: 4px;
+}
+
+.analysis-info {
+    margin: 5px 0;
+    font-size: 14px;
+    color: #495057;
+}
+
+.error {
+    color: #dc3545;
+    padding: 10px;
+    border-radius: 4px;
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    margin: 10px 0;
+}
+/* Add to your styles.css */
+.analysis-info {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 15px;
+}
+
+.analysis-info ul {
+    margin: 5px 0 15px 20px;
+}
+
+.text-preview {
+    background-color: #fff;
+    padding: 10px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    margin: 10px 0;
+}
+
+.preview-content {
+    font-family: monospace;
+    white-space: pre-wrap;
+    font-size: 0.9em;
+}
+
+.error {
+    color: #dc3545;
+    background-color: #f8d7da;
+    padding: 10px;
+    border-radius: 4px;
+    margin: 10px 0;
+}
+/* Add/Update in styles.css */
+.timeline-item {
+    background: white;
+    border-radius: 8px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border: 1px solid #e1e4e8;
+}
+
+.stage-content {
+    margin: 20px 0;
+}
+
+.stage-content h3 {
+    color: #2c3e50;
+    font-size: 1.5em;
+    margin: 25px 0 15px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #3498db;
+}
+
+.stage-content ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+.stage-content li {
+    margin: 15px 0;
+    padding-left: 20px;
+    position: relative;
+    line-height: 1.6;
+}
+
+.stage-content li::before {
+    content: "•";
+    color: #3498db;
+    position: absolute;
+    left: 0;
+    font-weight: bold;
+}
+
+.content-section {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.content-btn {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.content-btn:hover {
+    background-color: #45a049;
+    transform: translateY(-2px);
+}
+/* Add these to styles.css */
+.stage-content b {
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.timeline-item h2 {
+    color: #2c3e50;
+    font-size: 1.8em;
+    margin: 0 0 20px 0;
+    padding-bottom: 10px;
+    border-bottom: 3px solid #3498db;
+}
+
+.timeline-item p {
+    margin: 10px 0;
+    line-height: 1.6;
+}
+
+/* Better spacing for list items */
+.stage-content ul li {
+    padding: 10px 0 10px 20px;
+    border-bottom: 1px solid #eee;
+}
+
+.stage-content ul li:last-child {
+    border-bottom: none;
+}
+.upload-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+}
+
+.clear-btn {
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.clear-btn:hover {
+    background-color: #c82333;
+}
+
+/* Optional: Add different styling for disabled state */
+.clear-btn:disabled {
+    background-color: #6c757d;
+    cursor: not-allowed;
+}
+.clear-message {
+    background-color: #28a745;
+    color: white;
+    padding: 10px;
+    border-radius: 4px;
+    margin-top: 10px;
+    text-align: center;
+    animation: fadeOut 3s forwards;
+}
+
+@keyframes fadeOut {
+    0% { opacity: 1; }
+    70% { opacity: 1; }
+    100% { opacity: 0; }
 }

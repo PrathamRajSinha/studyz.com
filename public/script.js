@@ -1,9 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
     const topicForm = document.getElementById('topic-form');
+    const pdfUploadForm = document.getElementById('pdf-upload-form');
     const gradeSection = document.getElementById('grade-section');
     const pathwaySection = document.getElementById('pathway-section');
     const outputSection = document.getElementById('output-section');
     const loader = document.getElementById('loader');
+    const pdfAnalysisResult = document.getElementById('pdf-analysis-result');
 
     let currentTopic = '';
     let currentGrade = '';
@@ -43,11 +45,106 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+ // In script.js - Find the PDF upload form event listener
+if (pdfUploadForm) {
+    pdfUploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showLoader();
+        
+        const formData = new FormData();
+        const pdfFile = document.getElementById('pdf-file').files[0];
+        
+        if (!pdfFile) {
+            hideLoader();
+            if (pdfAnalysisResult) {
+                pdfAnalysisResult.style.display = 'block';
+                pdfAnalysisResult.innerHTML = '<p class="error">Please select a PDF file.</p>';
+            }
+            return;
+        }
+
+        console.log('Uploading file:', {
+            name: pdfFile.name,
+            size: pdfFile.size,
+            type: pdfFile.type
+        });
+        
+        formData.append('pdf', pdfFile);
+        
+        try {
+            const response = await fetch('http://localhost:3000/upload-pdf', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            console.log('Server response:', data);
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Upload failed');
+            }
+            
+            // Update form fields
+            if (document.getElementById('topic')) {
+                document.getElementById('topic').value = data.topic || '';
+            }
+            if (document.getElementById('grade')) {
+                document.getElementById('grade').value = data.grade || '';
+            }
+            
+            // Display detailed analysis result
+            if (pdfAnalysisResult) {
+                pdfAnalysisResult.style.display = 'block';
+                pdfAnalysisResult.innerHTML = `
+                    <div class="analysis-info">
+                        <p><strong>Detected Topic:</strong> ${data.topic || 'Not detected'}</p>
+                        <p><strong>Academic Level:</strong> ${data.grade || 'Not detected'}</p>
+                        ${data.subtopics && data.subtopics.length > 0 ? `
+                            <p><strong>Subtopics:</strong></p>
+                            <ul>
+                                ${data.subtopics.map(subtopic => `<li>${subtopic}</li>`).join('')}
+                            </ul>
+                        ` : ''}
+                        ${data.mainConcepts && data.mainConcepts.length > 0 ? `
+                            <p><strong>Main Concepts:</strong></p>
+                            <ul>
+                                ${data.mainConcepts.map(concept => `<li>${concept}</li>`).join('')}
+                            </ul>
+                        ` : ''}
+                        ${data.textPreview ? `
+                            <div class="text-preview">
+                                <p><strong>Text Preview:</strong></p>
+                                <p class="preview-content">${data.textPreview}</p>
+                            </div>
+                        ` : ''}
+                        <p><strong>Pages:</strong> ${data.numPages || 'Unknown'}</p>
+                    </div>
+                `;
+            }
+            
+            // Set current values and generate pathway
+            currentTopic = data.topic || '';
+            currentGrade = data.grade || '';
+            if (currentTopic && currentGrade) {
+                await generatePathway();
+            }
+            
+        } catch (error) {
+            console.error('Error uploading PDF:', error);
+            if (pdfAnalysisResult) {
+                pdfAnalysisResult.style.display = 'block';
+                pdfAnalysisResult.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            }
+        } finally {
+            hideLoader();
+        }
+    });
+}
     const pathwayTimeline = document.getElementById('pathway-timeline');
     if (pathwayTimeline) {
         pathwayTimeline.addEventListener('click', (e) => {
             if (e.target.classList.contains('content-btn')) {
-                e.preventDefault(); // Prevent default button behavior
+                e.preventDefault();
                 const contentType = e.target.dataset.type;
                 const stage = e.target.closest('.timeline-item')?.querySelector('h3')?.textContent || '';
                 const contentOutputDiv = e.target.closest('.timeline-item')?.querySelector('.content-output');
@@ -137,15 +234,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function createTimelineHTML(pathwayContent) {
+        console.log('Creating timeline from:', pathwayContent);
+        
         const parser = new DOMParser();
         const doc = parser.parseFromString(pathwayContent, 'text/html');
-        const stages = doc.querySelectorAll('h2');
+        const stages = Array.from(doc.querySelectorAll('h2'));
+        
+        console.log('Found stages:', stages.length);
     
         if (stages.length === 0) {
+            console.error('No stages found in pathway content');
             return '<p>No stages found in the generated pathway. Please try again.</p>';
         }
     
-        return Array.from(stages).map((stage, index) => {
+        return stages.map((stage, index) => {
+            console.log(`Processing stage ${index + 1}:`, stage.textContent);
+            
             let stageContent = '';
             let currentElement = stage.nextElementSibling;
             
@@ -171,5 +275,57 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
         }).join('');
+    }
+    const clearButton = document.getElementById('clear-content');
+    
+    if (clearButton) {
+        clearButton.addEventListener('click', () => {
+            // Clear file input
+            const fileInput = document.getElementById('pdf-file');
+            if (fileInput) {
+                fileInput.value = '';
+            }
+
+            // Clear analysis result
+            const analysisResult = document.getElementById('pdf-analysis-result');
+            if (analysisResult) {
+                analysisResult.style.display = 'none';
+                analysisResult.innerHTML = '';
+            }
+
+            // Clear form fields
+            if (document.getElementById('topic')) {
+                document.getElementById('topic').value = '';
+            }
+            if (document.getElementById('grade')) {
+                document.getElementById('grade').value = '';
+            }
+
+            // Clear pathway section
+            const pathwaySection = document.getElementById('pathway-section');
+            if (pathwaySection) {
+                pathwaySection.style.display = 'none';
+            }
+            const pathwayTimeline = document.getElementById('pathway-timeline');
+            if (pathwayTimeline) {
+                pathwayTimeline.innerHTML = '';
+            }
+
+            // Reset current values
+            currentTopic = '';
+            currentGrade = '';
+
+            // Optional: Show confirmation message
+            const uploadSection = document.querySelector('.upload-section');
+            const message = document.createElement('div');
+            message.className = 'clear-message';
+            message.textContent = 'Content cleared successfully';
+            uploadSection.appendChild(message);
+
+            // Remove message after 3 seconds
+            setTimeout(() => {
+                message.remove();
+            }, 3000);
+        });
     }
 });
