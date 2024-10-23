@@ -191,30 +191,94 @@ if (pdfUploadForm) {
         }
     }
 
-    async function fetchPathway(topic, grade) {
-        console.log(`Fetching pathway for topic: ${topic}, grade: ${grade}`);
+    // Update the fetchPathway function in script.js
+async function fetchPathway(topic, grade) {
+    const maxRetries = 3;
+    const retryDelay = 2000;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
+            console.log(`Attempt ${attempt}: Fetching pathway for topic: ${topic}, grade: ${grade}`);
             const response = await fetch(`/study-pathway?topic=${encodeURIComponent(topic)}&grade=${encodeURIComponent(grade)}`, {
-                timeout: 8000  // 8 second timeout
+                signal: AbortSignal.timeout(30000) // 30 second timeout
             });
-            
+
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorText = await response.text();
+                console.error('Error response:', errorText);
+                
+                // If it's the last attempt, throw the error
+                if (attempt === maxRetries) {
+                    throw new Error(errorText || `HTTP error! status: ${response.status}`);
+                }
+                
+                // If not the last attempt, wait and retry
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+                continue;
             }
-            
+
             const data = await response.text();
-            console.log('Received pathway data:', data.substring(0, 100) + '...'); 
+            console.log('Received pathway data:', data.substring(0, 100) + '...');
             
-            if (!data || data.includes('Error generating study pathway')) {
-                throw new Error(data || 'Empty response received');
+            if (data.includes('Error generating study pathway')) {
+                throw new Error(data);
             }
             
             return data;
         } catch (error) {
-            console.error('Fetch error:', error);
-            throw new Error(`Failed to fetch pathway: ${error.message}`);
+            console.error(`Attempt ${attempt} failed:`, error);
+            
+            if (attempt === maxRetries) {
+                throw new Error(`Failed to fetch pathway after ${maxRetries} attempts: ${error.message}`);
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
     }
+}
+
+// Update the error handling in the form submit handler
+if (topicForm) {
+    topicForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showLoader();
+        currentTopic = document.getElementById('topic')?.value || '';
+        currentGrade = document.getElementById('grade')?.value || '';
+        
+        try {
+            if (currentGrade) {
+                await generatePathway();
+            } else if (gradeSection) {
+                gradeSection.style.display = 'block';
+                if (pathwaySection) pathwaySection.style.display = 'none';
+                if (outputSection) outputSection.style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Error generating pathway:', error);
+            const errorMessage = error.message.includes('504') 
+                ? 'The request took too long to process. Please try again with a more specific topic.'
+                : `An error occurred while generating the pathway: ${error.message}`;
+            
+            if (pathwaySection) {
+                const pathwayTimeline = document.getElementById('pathway-timeline');
+                if (pathwayTimeline) {
+                    pathwayTimeline.innerHTML = `
+                        <div class="error-message" style="color: #721c24; background-color: #f8d7da; padding: 1rem; border-radius: 4px; margin: 1rem 0;">
+                            <h3>Error</h3>
+                            <p>${errorMessage}</p>
+                            <button onclick="location.reload()" class="retry-btn" style="margin-top: 1rem; padding: 0.5rem 1rem; background-color: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                Try Again
+                            </button>
+                        </div>
+                    `;
+                }
+                pathwaySection.style.display = 'block';
+            }
+        } finally {
+            hideLoader();
+        }
+    });
+}
 
     async function fetchContent(topic, grade, contentType, stage, contentOutputDiv) {
         try {
@@ -232,24 +296,49 @@ if (pdfUploadForm) {
         }
     }
 
-    async function pollContent(taskId, maxAttempts = 30, interval = 1000) {
-        for (let i = 0; i < maxAttempts; i++) {
-            await new Promise(resolve => setTimeout(resolve, interval));
-            try {
-                const statusResponse = await fetch(`/check-content-status?taskId=${taskId}`);
-                if (!statusResponse.ok) {
-                    throw new Error(`HTTP error! status: ${statusResponse.status}`);
-                }
-                const status = await statusResponse.json();
-                if (status.status === 'completed') {
-                    return status.content;
-                }
-            } catch (error) {
-                console.error('Error polling content:', error);
+   // Update these values in your script.js
+// Update these values in your script.js
+async function pollContent(taskId, maxAttempts = 60, interval = 1000) {
+    showLoader(); // Make sure loader is visible during polling
+    
+    for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(resolve => setTimeout(resolve, interval));
+        try {
+            const statusResponse = await fetch(`/check-content-status?taskId=${taskId}`);
+            if (!statusResponse.ok) {
+                throw new Error(`HTTP error! status: ${statusResponse.status}`);
+            }
+            const status = await statusResponse.json();
+            if (status.status === 'completed') {
+                hideLoader();
+                return status.content;
+            }
+        } catch (error) {
+            console.error('Error polling content:', error);
+            if (i === maxAttempts - 1) {
+                hideLoader();
+                throw new Error('Content generation timed out. Please try again.');
             }
         }
-        throw new Error('Content generation timed out. Please try again.');
     }
+    hideLoader();
+    throw new Error('Content generation timed out. Please try again.');
+}
+
+// Add or update these utility functions if they don't exist
+function showLoader() {
+    const loader = document.getElementById('loader');
+    if (loader) {
+        loader.style.display = 'flex';
+    }
+}
+
+function hideLoader() {
+    const loader = document.getElementById('loader');
+    if (loader) {
+        loader.style.display = 'none';
+    }
+}
 
     function createTimelineHTML(pathwayContent) {
         console.log('Creating timeline from:', pathwayContent);
@@ -345,5 +434,113 @@ if (pdfUploadForm) {
                 message.remove();
             }, 3000);
         });
+    }
+});
+// Add this to your script.js
+
+document.addEventListener('DOMContentLoaded', () => {
+    const uploadForm = document.getElementById('upload-form');
+    const fileInput = document.getElementById('file-input');
+    const uploadButton = document.getElementById('upload-button');
+    const clearButton = document.getElementById('clear-button');
+    const analysisSection = document.getElementById('analysis-section');
+    
+    if (uploadForm) {
+        uploadForm.addEventListener('submit', handleUpload);
+    }
+    
+    if (clearButton) {
+        clearButton.addEventListener('click', clearContent);
+    }
+
+    async function handleUpload(e) {
+        e.preventDefault();
+        showLoader();
+
+        const file = fileInput.files[0];
+        if (!file) {
+            hideLoader();
+            showError('Please select a PDF file');
+            return;
+        }
+
+        if (file.type !== 'application/pdf') {
+            hideLoader();
+            showError('Please upload only PDF files');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('pdf', file);
+
+        try {
+            const response = await fetch('/upload-pdf', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+
+            if (result.success) {
+                displayAnalysis(result.analysis);
+                await generatePathway(result.analysis.topic, result.analysis.academicLevel);
+            } else {
+                showError(result.error || 'Error processing PDF');
+            }
+
+        } catch (error) {
+            console.error('Upload error:', error);
+            showError('Error uploading file: ' + error.message);
+        } finally {
+            hideLoader();
+        }
+    }
+
+    function showError(message) {
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-message';
+        errorDiv.style.cssText = 'color: #721c24; background-color: #f8d7da; padding: 1rem; border-radius: 4px; margin: 1rem 0;';
+        errorDiv.innerHTML = `
+            <strong>Error:</strong> ${message}
+            <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; color: #721c24; cursor: pointer;">×</button>
+        `;
+        uploadForm.insertAdjacentElement('afterend', errorDiv);
+    }
+
+    function displayAnalysis(analysis) {
+        if (analysisSection) {
+            analysisSection.innerHTML = `
+                <div class="analysis-results">
+                    <h3>Document Analysis</h3>
+                    <p><strong>Detected Topic:</strong> ${analysis.topic}</p>
+                    <p><strong>Academic Level:</strong> ${analysis.academicLevel}</p>
+                    <p><strong>Pages:</strong> ${analysis.pageCount}</p>
+                    <p><strong>Word Count:</strong> ${analysis.wordCount}</p>
+                    <h4>Text Preview:</h4>
+                    <div class="text-preview">${analysis.preview}</div>
+                </div>
+            `;
+            analysisSection.style.display = 'block';
+        }
+    }
+
+    function clearContent() {
+        if (fileInput) {
+            fileInput.value = '';
+        }
+        if (analysisSection) {
+            analysisSection.innerHTML = '';
+            analysisSection.style.display = 'none';
+        }
+        const pathwaySection = document.getElementById('pathway-section');
+        if (pathwaySection) {
+            pathwaySection.style.display = 'none';
+        }
+        const errorMessages = document.querySelectorAll('.error-message');
+        errorMessages.forEach(msg => msg.remove());
     }
 });

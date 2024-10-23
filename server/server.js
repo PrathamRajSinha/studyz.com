@@ -13,7 +13,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.json());
-const cache = new NodeCache({ stdTTL: 600 }); 
+const cache = new NodeCache({ stdTTL: 3600 }); 
 
 const API_KEY = "AIzaSyBLvP6wb7dV3myixOOb5lqZLFm5ePrdP6U";
 
@@ -26,233 +26,192 @@ const youtube = google.youtube({
 });
 
 const upload = multer({
-    storage: multer.memoryStorage(),
-    fileFilter: (req, file, cb) => {
-        if (file.mimetype === 'application/pdf') {
-            cb(null, true);
-        } else {
-            cb(new Error('Only PDF files are allowed!'));
-        }
-    },
-    limits: {
-        fileSize: 50 * 1024 * 1024 
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed'), false);
     }
-}).single('pdf');
+  }
+});
 
-app.post('/upload-pdf', (req, res) => {
-  upload(req, res, async function(err) {
-      console.log('Upload request received');
+app.post('/upload-pdf', function(req, res) {
+    upload.single('pdf')(req, res, async function(err) {
+        console.log('Upload request received');
 
-      if (err instanceof multer.MulterError) {
-          console.error('Multer error:', err);
-          return res.status(400).json({ error: `File upload error: ${err.message}` });
-      } else if (err) {
-          console.error('Unknown error:', err);
-          return res.status(500).json({ error: `Unknown error: ${err.message}` });
-      }
+        if (err instanceof multer.MulterError) {
+            console.error('Multer error:', err);
+            return res.status(400).json({ error: `File upload error: ${err.message}` });
+        } else if (err) {
+            console.error('Unknown error:', err);
+            return res.status(500).json({ error: `Unknown error: ${err.message}` });
+        }
 
-      try {
-          console.log('File details:', {
-              filename: req?.file?.originalname,
-              mimetype: req?.file?.mimetype,
-              size: req?.file?.size
-          });
+        try {
+            if (!req.file) {
+                return res.status(400).json({ error: 'No file uploaded' });
+            }
 
-          if (!req.file) {
-              return res.status(400).json({ error: 'No file uploaded' });
-          }
+            console.log('File received:', {
+                filename: req.file.originalname,
+                size: req.file.size,
+                mimetype: req.file.mimetype
+            });
 
-          if (!req.file.buffer) {
-              console.log('Buffer missing, reading from path');
-              const dataBuffer = fs.readFileSync(req.file.path);
-              req.file.buffer = dataBuffer;
-          }
+            const pdfData = await pdf(req.file.buffer);
+            
+            console.log('PDF processed:', {
+                pages: pdfData.numpages,
+                textLength: pdfData.text?.length || 0
+            });
 
-          const pdfData = await pdf(req.file.buffer);
-          console.log('PDF Content Preview:', {
-              text: pdfData.text.substring(0, 500),
-              numPages: pdfData.numpages,
-              info: pdfData.info
-          });
+            if (!pdfData.text || pdfData.text.length === 0) {
+                throw new Error('No text content extracted from PDF');
+            }
 
-          if (!pdfData.text || pdfData.text.length === 0) {
-              throw new Error('No text content extracted from PDF');
-          }
+            const summaryPrompt = `
+                Analyze this educational content and provide a response in this exact JSON format:
+                {
+                    "topic": "specific topic name",
+                    "grade": "academic level",
+                    "subtopics": ["list", "of", "subtopics"],
+                    "mainConcepts": ["main", "concepts", "covered"]
+                }
 
-          const summaryPrompt = `
-              Analyze this educational content and respond in this exact JSON format:
-              {
-                  "topic": "specific topic name - be as specific as possible",
-                  "grade": "academic level",
-                  "subtopics": ["list", "of", "subtopics"],
-                  "mainConcepts": ["main", "concepts", "covered"]
-              }
+                Content to analyze:
+                "${pdfData.text.substring(0, 1500)}"
 
-              Content to analyze:
-              "${pdfData.text.substring(0, 1500)}"
+                Note: Grade should be one of: Elementary/Middle School/High School/College
+            `;
 
-              Important: 
-              1. Ensure response is in valid JSON format only
-              2. Extract the exact topic from the content
-              3. Do not use generic terms like "General Topic"
-              4. Include at least 3 subtopics and main concepts
-              5. Grade should be one of: Elementary/Middle School/High School/College
-          `;
+            const result = await model.generateContent(summaryPrompt);
+            const response = await result.response;
+            const responseText = response.text();
+            
+            try {
+                const analysis = JSON.parse(responseText);
+                analysis.textPreview = pdfData.text.substring(0, 200);
+                analysis.numPages = pdfData.numpages;
 
-          const result = await model.generateContent(summaryPrompt);
-          const response = await result.response;
-          const responseText = response.text();
+                console.log('Analysis completed:', {
+                    topic: analysis.topic,
+                    grade: analysis.grade
+                });
 
-          console.log('AI Raw Response:', responseText);
+                res.json(analysis);
+            } catch (parseError) {
+                console.error('Failed to parse AI response:', parseError);
+                
+                const fallbackAnalysis = {
+                    topic: pdfData.text.match(/^([^\n.!?]+)/)?.[1]?.trim() || "Unknown Topic",
+                    grade: "College",
+                    subtopics: [],
+                    mainConcepts: [],
+                    textPreview: pdfData.text.substring(0, 200),
+                    numPages: pdfData.numpages
+                };
 
-          try {
-              let analysis = JSON.parse(responseText);
-              
-              if (analysis.topic === "General Topic" || !analysis.topic) {
-                  const titleMatch = pdfData.text.match(/^([^\n.!?]+)/);
-                  if (titleMatch) {
-                      analysis.topic = titleMatch[1].trim();
-                  }
-              }
+                res.json(fallbackAnalysis);
+            }
 
-              if (!analysis.topic || analysis.topic === "General Topic") {
-                  const topicMatch = responseText.match(/main topic is ([^.]+)/i);
-                  if (topicMatch) {
-                      analysis.topic = topicMatch[1].trim();
-                  }
-              }
-
-              if (analysis.topic) {
-                  analysis.topic = analysis.topic
-                      .replace(/["""]/g, '')
-                      .replace(/^the /i, '')
-                      .trim();
-              }
-
-              console.log('Processed Analysis:', analysis);
-
-              analysis.textPreview = pdfData.text.substring(0, 200);
-              analysis.numPages = pdfData.numpages;
-
-              res.json(analysis);
-
-          } catch (parseError) {
-              console.error('Parse error:', parseError);
-              
-              const analysis = {
-                  topic: responseText.match(/main topic is ([^.]+)/i)?.[1] || 
-                         pdfData.text.match(/^([^\n.!?]+)/)?.[1] || 
-                         "Machine Learning for ASD Classification",
-                  grade: responseText.match(/appropriate for (\w+ level)/i)?.[1] || 
-                        "College",
-                  subtopics: [],
-                  mainConcepts: [],
-                  textPreview: pdfData.text.substring(0, 200),
-                  numPages: pdfData.numpages
-              };
-
-              res.json(analysis);
-          }
-
-      } catch (error) {
-          console.error('Processing error:', error);
-          res.status(500).json({ error: `Processing error: ${error.message}` });
-      }
-  });
+        } catch (error) {
+            console.error('PDF processing error:', error);
+            res.status(500).json({ 
+                error: 'Error processing PDF file',
+                details: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            });
+        }
+    });
 });
 
 async function generateStudyPathwayStage(topic, grade, stageNumber) {
-  const prompt = `
-      Create Stage ${stageNumber} of a 3-stage learning pathway for "${topic}" at the "${grade}" level.
-      
-      Important requirements:
-      1. Use <b> tags for emphasis instead of asterisks
-      2. Each bullet point should be clear and descriptive
-      3. Content should build progressively
-      
-      Use this exact structure:
-      <h2>Stage ${stageNumber}: [Stage Name]</h2>
-      <h3>Foundational Skills</h3>
-      <ul>
-          <li><b>Skill Name:</b> Description of the skill and its importance</li>
-          <li><b>Skill Name:</b> Description of the skill and its importance</li>
-      </ul>
-      <h3>Core Topics</h3>
-      <ul>
-          <li><b>Topic Name:</b> Brief explanation of what will be covered</li>
-          <li><b>Topic Name:</b> Brief explanation of what will be covered</li>
-      </ul>
-      <h3>Learning Activities</h3>
-      <ul>
-          <li><b>Activity Name:</b> Detailed description of the learning activity</li>
-          <li><b>Activity Name:</b> Detailed description of the learning activity</li>
-      </ul>
+    const prompt = `
+        Create a single stage for a study pathway on the topic "${topic}" at the "${grade}" level.
+        This should be stage number ${stageNumber} of a 3 to 5-stage pathway.
+        Use the following structure:
+        use <b> to bold any subtopics or topics.
+        <h2>Stage ${stageNumber}: [Stage Name]</h2>
+        <h3>Foundational Skills</h3>
+        <ul>
+            <li>[Skill 1]</li>
+            <li>[Skill 2]</li>
+        </ul>
+        <h3>Core Topics</h3>
+        <ul>
+            <li>[Topic 1]</li>
+            <li>[Topic 2]</li>
+        </ul>
+        <h3>Learning Activities</h3>
+        <ul>
+            <li>[Activity 1]</li>
+            <li>[Activity 2]</li>
+        </ul>
 
-      Make content relevant to ${topic} and appropriate for ${grade} level.
-      Use HTML tags for formatting, not markdown or asterisks.
-      Keep descriptions clear and actionable.
-  `;
-  
-  try {
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = await response.text();
-      
-      const cleanedText = text
-          .replace(/\*\*/g, '')
-          .replace(/\*/g, '')
-          .trim();
-      
-      return cleanedText;
-  } catch (error) {
-      console.error(`Error generating stage ${stageNumber}:`, error);
-      return `<h2>Stage ${stageNumber}: Learning Path</h2><p>Error generating content. Please try again.</p>`;
-  }
+        Keep the response under 500 characters.
+    `;
+
+    const retryOptions = {
+        maxRetries: 3,
+        retryDelay: 1000,
+        timeout: 30000
+    };
+
+    for (let attempt = 1; attempt <= retryOptions.maxRetries; attempt++) {
+        try {
+            const result = await Promise.race([
+                model.generateContent(prompt),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Request timeout')), retryOptions.timeout)
+                )
+            ]);
+            
+            const response = await result.response;
+            const text = await response.text();
+            return text;
+        } catch (error) {
+            console.error(`Attempt ${attempt} failed:`, error);
+            if (attempt === retryOptions.maxRetries) {
+                throw error;
+            }
+            await new Promise(resolve => setTimeout(resolve, retryOptions.retryDelay));
+        }
+    }
 }
 
 async function generateStudyPathway(topic, grade) {
-  const cacheKey = `pathway_${topic}_${grade}`;
-  const cachedPathway = cache.get(cacheKey);
-  if (cachedPathway) {
-      return cachedPathway;
-  }
+    const cacheKey = `pathway_${topic}_${grade}`;
+    const cachedPathway = cache.get(cacheKey);
+    if (cachedPathway) {
+        return cachedPathway;
+    }
 
-  try {
-      const stages = await Promise.all([
-          generateStudyPathwayStage(topic, grade, 1),
-          generateStudyPathwayStage(topic, grade, 2),
-          generateStudyPathwayStage(topic, grade, 3)
-      ]);
-      const pathway = stages.join('\n');
-      cache.set(cacheKey, pathway);
-      return pathway;
-  } catch (error) {
-      console.error('Error generating study pathway:', error);
-      return '<div class="study-pathway">Error generating study pathway. Please try again.</div>';
-  }
+    try {
+        const stages = await Promise.all([
+            generateStudyPathwayStage(topic, grade, 1),
+            generateStudyPathwayStage(topic, grade, 2),
+            generateStudyPathwayStage(topic, grade, 3)
+        ]);
+        const pathway = stages.join('\n');
+        cache.set(cacheKey, pathway);
+        return pathway;
+    } catch (error) {
+        console.error('Error generating study pathway:', error);
+        return '<div class="study-pathway">Error generating study pathway. Please try again.</div>';
+    }
 }
 
 async function generateAINotes(topic, grade, stage) {
     const prompt = `
         Generate concise and informative study notes for the topic "${topic}" specifically focusing on "${stage}" at the "${grade}" level. 
-        Ensure the notes are tailored to the current stage of learning, covering the foundational skills, core topics, and learning activities mentioned for this stage.
-        Include key concepts, definitions, and important points relevant to this stage. 
+        Ensure the notes are tailored to the current stage of learning.
         Format the notes with HTML, using appropriate tags like <h3> for subtopics, <p> for paragraphs, and <ul> or <ol> for lists.
         Use <b> tags to highlight important terms or concepts.
         Limit the response to around 500 words.
-        Example format:
-        <h3>Key Concept for ${stage}</h3>
-        <p>Brief explanation of a concept specific to this stage.</p>
-        <ul>
-            <li><b>Important term:</b> Definition relevant to this stage</li>
-            <li>Key point related to a foundational skill for this stage</li>
-        </ul>
-        <h3>Core Topic from ${stage}</h3>
-        <p>Explanation of a core topic mentioned in this stage.</p>
-        <ol>
-            <li>Step or detail related to a learning activity for this stage</li>
-            <li>Another important point specific to this stage of learning</li>
-        </ol>
     `;
     try {
         const result = await model.generateContent(prompt);
@@ -471,7 +430,7 @@ app.get('/initiate-content-generation', async (req, res) => {
         return res.status(400).send('Topic, grade, content type, and stage are required.');
     }
     const taskId = `${type}_${Date.now()}`;
-    cache.set(taskId, 'pending', 300); 
+    cache.set(taskId, 'pending', 3600); 
     
     generateContent(taskId, topic, grade, type, stage).catch(console.error);
     
