@@ -72,7 +72,7 @@ if (pdfUploadForm) {
         formData.append('pdf', pdfFile);
         
         try {
-            const response = await fetch('http://localhost:3000/upload-pdf', {
+            const response = await fetch('/upload-pdf', {
                 method: 'POST',
                 body: formData
             });
