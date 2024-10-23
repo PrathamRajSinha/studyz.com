@@ -3,10 +3,7 @@
   "builds": [
     {
       "src": "server/server.js",
-      "use": "@vercel/node",
-      "config": {
-        "maxDuration": 60
-      }
+      "use": "@vercel/node"
     },
     {
       "src": "public/**",
@@ -15,15 +12,23 @@
   ],
   "routes": [
     {
+      "src": "/upload-pdf",
+      "methods": ["POST"],
+      "dest": "server/server.js"
+    },
+    {
       "src": "/study-pathway",
+      "methods": ["GET"],
       "dest": "server/server.js"
     },
     {
       "src": "/initiate-content-generation",
+      "methods": ["GET"],
       "dest": "server/server.js"
     },
     {
       "src": "/check-content-status",
+      "methods": ["GET"],
       "dest": "server/server.js"
     },
     {
