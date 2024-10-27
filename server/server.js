@@ -7,22 +7,12 @@ const NodeCache = require('node-cache');
 const multer = require('multer');
 const pdf = require('pdf-parse');
 const cors = require('cors');
-const createWorker = require('tesseract.js').createWorker;
-const sharp = require('sharp');
-
-// Environment variables with defaults
-const MAX_FILE_SIZE = process.env.MAX_FILE_SIZE || 50 * 1024 * 1024; // 50MB default
-const UPLOAD_TIMEOUT = process.env.UPLOAD_TIMEOUT || 300000; // 5 minutes
-const CHUNK_SIZE = process.env.CHUNK_SIZE || 5 * 1024 * 1024; // 5MB chunks
 
 const app = express();
-
-// Configure Express with increased limits
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
-
+app.use(express.json());
 const cache = new NodeCache({ stdTTL: 3600 }); 
 
 const API_KEY = "AIzaSyBLvP6wb7dV3myixOOb5lqZLFm5ePrdP6U";
@@ -35,72 +25,25 @@ const youtube = google.youtube({
     auth: API_KEY
 });
 
-// Configure multer with enhanced settings
 const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: {
-        fileSize: MAX_FILE_SIZE,
-        files: 1
-    },
-    fileFilter: (req, file, cb) => {
-        if (file.mimetype === 'application/pdf') {
-            cb(null, true);
-        } else {
-            cb(new Error('Only PDF files are allowed'), false);
-        }
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed'), false);
     }
+  }
 });
 
-// Add timeout middleware
-const timeoutMiddleware = (req, res, next) => {
-    res.setTimeout(UPLOAD_TIMEOUT, () => {
-        res.status(408).json({ 
-            error: 'Request timeout', 
-            message: 'The upload took too long to complete' 
-        });
-    });
-    next();
-};
-
-// OCR Functions
-async function extractTextFromImage(imageBuffer) {
-    const worker = await createWorker();
-    try {
-        await worker.loadLanguage('eng');
-        await worker.initialize('eng');
-        const { data: { text } } = await worker.recognize(imageBuffer);
-        await worker.terminate();
-        return text;
-    } catch (error) {
-        console.error('OCR Error:', error);
-        throw error;
-    }
-}
-
-async function processPageImage(pageData) {
-    try {
-        const image = await sharp(pageData).toBuffer();
-        return await extractTextFromImage(image);
-    } catch (error) {
-        console.error('Image processing error:', error);
-        return '';
-    }
-}
-
-// PDF Upload endpoint
-app.post('/upload-pdf', timeoutMiddleware, function(req, res) {
+app.post('/upload-pdf', function(req, res) {
     upload.single('pdf')(req, res, async function(err) {
         console.log('Upload request received');
 
         if (err instanceof multer.MulterError) {
-            if (err.code === 'LIMIT_FILE_SIZE') {
-                return res.status(413).json({ 
-                    error: 'File too large', 
-                    maxSize: MAX_FILE_SIZE,
-                    maxSizeMB: MAX_FILE_SIZE / (1024 * 1024),
-                    message: `Maximum file size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`
-                });
-            }
             console.error('Multer error:', err);
             return res.status(400).json({ error: `File upload error: ${err.message}` });
         } else if (err) {
@@ -116,98 +59,67 @@ app.post('/upload-pdf', timeoutMiddleware, function(req, res) {
             console.log('File received:', {
                 filename: req.file.originalname,
                 size: req.file.size,
-                sizeMB: (req.file.size / (1024 * 1024)).toFixed(2) + 'MB',
                 mimetype: req.file.mimetype
             });
 
-            if (req.file.size === 0) {
-                return res.status(400).json({ error: 'Empty file uploaded' });
+            const pdfData = await pdf(req.file.buffer);
+            
+            console.log('PDF processed:', {
+                pages: pdfData.numpages,
+                textLength: pdfData.text?.length || 0
+            });
+
+            if (!pdfData.text || pdfData.text.length === 0) {
+                throw new Error('No text content extracted from PDF');
             }
 
-            // Process the PDF
-            const fileBuffer = req.file.buffer;
-            let extractedText = '';
-            let numPages = 0;
+            const summaryPrompt = `
+                Analyze this educational content and provide a response in this exact JSON format:
+                {
+                    "topic": "specific topic name",
+                    "grade": "academic level",
+                    "subtopics": ["list", "of", "subtopics"],
+                    "mainConcepts": ["main", "concepts", "covered"]
+                }
 
+                Content to analyze:
+                "${pdfData.text.substring(0, 1500)}"
+
+                Note: Grade should be one of: Elementary/Middle School/High School/College
+            `;
+
+            const result = await model.generateContent(summaryPrompt);
+            const response = await result.response;
+            const responseText = response.text();
+            
             try {
-                // Try standard PDF text extraction first
-                const pdfData = await pdf(fileBuffer);
-                extractedText = pdfData.text;
-                numPages = pdfData.numpages;
+                const analysis = JSON.parse(responseText);
+                analysis.textPreview = pdfData.text.substring(0, 200);
+                analysis.numPages = pdfData.numpages;
 
-                // If no text was extracted, try OCR
-                if (!extractedText || extractedText.trim().length === 0) {
-                    console.log('No machine-readable text found, attempting OCR...');
-                    const pages = await pdf(fileBuffer);
-                    const ocrPromises = Array.from({ length: pages.numpages }, (_, i) => {
-                        return processPageImage(pages[i]);
-                    });
-                    const ocrResults = await Promise.all(ocrPromises);
-                    extractedText = ocrResults.join('\n');
-                }
+                console.log('Analysis completed:', {
+                    topic: analysis.topic,
+                    grade: analysis.grade
+                });
 
-                if (!extractedText || extractedText.trim().length === 0) {
-                    throw new Error('No text content could be extracted from the PDF');
-                }
+                res.json(analysis);
+            } catch (parseError) {
+                console.error('Failed to parse AI response:', parseError);
+                
+                const fallbackAnalysis = {
+                    topic: pdfData.text.match(/^([^\n.!?]+)/)?.[1]?.trim() || "Unknown Topic",
+                    grade: "College",
+                    subtopics: [],
+                    mainConcepts: [],
+                    textPreview: pdfData.text.substring(0, 200),
+                    numPages: pdfData.numpages
+                };
 
-                const summaryPrompt = `
-                    Analyze this educational content and provide a response in this exact JSON format:
-                    {
-                        "topic": "specific topic name",
-                        "grade": "academic level",
-                        "subtopics": ["list", "of", "subtopics"],
-                        "mainConcepts": ["main", "concepts", "covered"]
-                    }
-
-                    Content to analyze:
-                    "${extractedText.substring(0, 1500)}"
-
-                    Note: Grade should be one of: Elementary/Middle School/High School/College
-                `;
-
-                const result = await model.generateContent(summaryPrompt);
-                const response = await result.response;
-                const responseText = response.text();
-
-                try {
-                    const analysis = JSON.parse(responseText);
-                    analysis.textPreview = extractedText.substring(0, 200);
-                    analysis.numPages = numPages;
-                    analysis.fileSize = req.file.size;
-                    analysis.fileSizeMB = (req.file.size / (1024 * 1024)).toFixed(2);
-
-                    console.log('Analysis completed:', {
-                        topic: analysis.topic,
-                        grade: analysis.grade,
-                        pages: analysis.numPages,
-                        size: analysis.fileSizeMB + 'MB'
-                    });
-
-                    res.json(analysis);
-                } catch (parseError) {
-                    console.error('Failed to parse AI response:', parseError);
-                    
-                    const fallbackAnalysis = {
-                        topic: extractedText.match(/^([^\n.!?]+)/)?.[1]?.trim() || "Unknown Topic",
-                        grade: "College",
-                        subtopics: [],
-                        mainConcepts: [],
-                        textPreview: extractedText.substring(0, 200),
-                        numPages: numPages,
-                        fileSize: req.file.size,
-                        fileSizeMB: (req.file.size / (1024 * 1024)).toFixed(2)
-                    };
-
-                    res.json(fallbackAnalysis);
-                }
-
-            } catch (pdfError) {
-                console.error('PDF processing error:', pdfError);
-                throw new Error(`Failed to process PDF file: ${pdfError.message}`);
+                res.json(fallbackAnalysis);
             }
 
         } catch (error) {
-            console.error('Error processing upload:', error);
+            console.error('PDF processing error:', error);
             res.status(500).json({ 
                 error: 'Error processing PDF file',
                 details: error.message,
@@ -218,66 +130,66 @@ app.post('/upload-pdf', timeoutMiddleware, function(req, res) {
 });
 
 async function generateStudyPathwayStage(topic, grade, stageNumber) {
-    const prompt = `
-        Analyze and generate Stage ${stageNumber} of a study pathway for "${topic}" at "${grade}" level.
-        
-        First, quickly assess (do not include this analysis in output):
-        1. Topic complexity (consider prerequisites, abstract concepts, technical terms)
-        2. Grade-appropriate depth
-        3. Required background knowledge
-        4. Practical application potential
-        
-        Then generate the stage content following this structure:
-        <h2>Stage ${stageNumber}: [Create a clear stage title showing progression]</h2>
-        
-        <h3>Foundational Skills</h3>
-        <ul>
-        - Include 2-5 skills based on topic complexity
-        - Use <b>tags</b> for key terms
-        - Skills must be measurable and grade-appropriate
-        - Consider previous stage knowledge
-        </ul>
-        
-        <h3>Core Topics</h3>
-        <ul>
-        - Include 2-5 topics based on complexity
-        - Use <b>tags</b> for important terms
-        - Topics should show clear progression
-        - Match ${grade} level understanding
-        </ul>
-        
-        <h3>Learning Activities</h3>
-        <ul>
-        - Include 2-4 activities
-        - Mix theoretical and practical tasks
-        - Scale difficulty to topic and grade
-        - Include collaborative and individual work
-        </ul>
+  const prompt = `
+    Analyze and generate Stage ${stageNumber} of a study pathway for "${topic}" at "${grade}" level.
+    
+    First, quickly assess (do not include this analysis in output):
+    1. Topic complexity (consider prerequisites, abstract concepts, technical terms)
+    2. Grade-appropriate depth
+    3. Required background knowledge
+    4. Practical application potential
+    
+    Then generate the stage content following this structure:
+    <h2>Stage ${stageNumber}: [Create a clear stage title showing progression]</h2>
+    
+    <h3>Foundational Skills</h3>
+    <ul>
+    - Include 2-5 skills based on topic complexity
+    - Use <b>tags</b> for key terms
+    - Skills must be measurable and grade-appropriate
+    - Consider previous stage knowledge
+    </ul>
+    
+    <h3>Core Topics</h3>
+    <ul>
+    - Include 2-5 topics based on complexity
+    - Use <b>tags</b> for important terms
+    - Topics should show clear progression
+    - Match ${grade} level understanding
+    </ul>
+    
+    <h3>Learning Activities</h3>
+    <ul>
+    - Include 2-4 activities
+    - Mix theoretical and practical tasks
+    - Scale difficulty to topic and grade
+    - Include collaborative and individual work
+    </ul>
 
-        Guidelines:
-        - Adapt content depth to topic complexity
-        - Use grade-appropriate language
-        - Ensure natural learning progression
-        - Keep response under 500 characters
-        - Maintain exact HTML formatting
-        - Make content specific to ${topic}
+    Guidelines:
+    - Adapt content depth to topic complexity
+    - Use grade-appropriate language
+    - Ensure natural learning progression
+    - Keep response under 500 characters
+    - Maintain exact HTML formatting
+    - Make content specific to ${topic}
 
-        If Stage 1: Focus on foundations
-        If Stage 2: Build core concepts
-        If Stage 3: Advanced application
-        
-        Ensure all content directly relates to ${topic} and ${grade} level.
-    `;
+    If Stage 1: Focus on foundations
+    If Stage 2: Build core concepts
+    If Stage 3: Advanced application
+    
+    Ensure all content directly relates to ${topic} and ${grade} level.
+  `;
 
-    try {
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = await response.text();
-        return text;
-    } catch (error) {
-        console.error(`Error generating stage ${stageNumber}:`, error);
-        return `<div class="study-pathway">Error generating stage ${stageNumber}. Please try again.</div>`;
-    }
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = await response.text();
+    return text;
+  } catch (error) {
+    console.error(`Error generating stage ${stageNumber}:`, error);
+    return `<div class="study-pathway">Error generating stage ${stageNumber}. Please try again.</div>`;
+  }
 }
 
 async function generateStudyPathway(topic, grade) {
@@ -393,7 +305,8 @@ async function generateVideoLinks(topic, grade, stage) {
             `<ul>${videoLinks.join('')}</ul>` : 
             '<p>No sufficiently relevant educational videos found for this topic and stage.</p>';
 
-    } catch (error) {console.error('Error fetching YouTube videos:', error);
+    } catch (error) {
+        console.error('Error fetching YouTube videos:', error);
         return `<p>Error fetching video links: ${error.message}</p>`;
     }
 }
@@ -575,11 +488,7 @@ app.get('/study-pathway', async (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error('Global error handler:', err);
-    res.status(500).json({ 
-        error: 'Internal server error',
-        message: err.message,
-        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
+    res.status(500).json({ error: 'Internal server error' });
 });
 
 app.get('*', (req, res) => {
@@ -590,9 +499,7 @@ if (process.env.NODE_ENV !== 'production') {
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => {
         console.log(`Server is running on port ${PORT}`);
-        console.log(`Maximum file size: ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
-        console.log(`Upload timeout: ${UPLOAD_TIMEOUT / 1000} seconds`);
     });
 }
 
-module.exports = a
+module.exports = app;
