@@ -7,13 +7,14 @@ const NodeCache = require('node-cache');
 const multer = require('multer');
 const pdf = require('pdf-parse');
 const cors = require('cors');
+const createWorker = require('tesseract.js').createWorker;
+const sharp = require('sharp');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
-app.use(express.json());
-const cache = new NodeCache({ stdTTL: 3600 }); 
+const cache = new NodeCache({ stdTTL: 3600 });
 
 const API_KEY = "AIzaSyBLvP6wb7dV3myixOOb5lqZLFm5ePrdP6U";
 
@@ -459,6 +460,128 @@ app.get('/check-content-status', (req, res) => {
         return res.json({ status: 'pending' });
     }
     res.json({ status: 'completed', content: status });
+});
+
+async function extractTextFromImage(imageBuffer) {
+    const worker = await createWorker();
+    try {
+        await worker.loadLanguage('eng');
+        await worker.initialize('eng');
+        const { data: { text } } = await worker.recognize(imageBuffer);
+        await worker.terminate();
+        return text;
+    } catch (error) {
+        console.error('OCR Error:', error);
+        throw error;
+    }
+}
+
+async function processPageImage(pageData) {
+    try {
+        // Convert PDF page to image
+        const image = await sharp(pageData).toBuffer();
+        // Perform OCR on the image
+        return await extractTextFromImage(image);
+    } catch (error) {
+        console.error('Image processing error:', error);
+        return '';
+    }
+}
+
+app.post('/upload-pdf', function(req, res) {
+    upload.single('pdf')(req, res, async function(err) {
+        console.log('Upload request received');
+
+        if (err instanceof multer.MulterError) {
+            console.error('Multer error:', err);
+            return res.status(400).json({ error: `File upload error: ${err.message}` });
+        } else if (err) {
+            console.error('Unknown error:', err);
+            return res.status(500).json({ error: `Unknown error: ${err.message}` });
+        }
+
+        try {
+            if (!req.file) {
+                return res.status(400).json({ error: 'No file uploaded' });
+            }
+
+            console.log('File received:', {
+                filename: req.file.originalname,
+                size: req.file.size,
+                mimetype: req.file.mimetype
+            });
+
+            // Try standard PDF text extraction first
+            const pdfData = await pdf(req.file.buffer);
+            let extractedText = pdfData.text;
+
+            // If no text was extracted, try OCR
+            if (!extractedText || extractedText.trim().length === 0) {
+                console.log('No machine-readable text found, attempting OCR...');
+                const pages = await pdf(req.file.buffer);
+                const ocrPromises = pages.map(processPageImage);
+                const ocrResults = await Promise.all(ocrPromises);
+                extractedText = ocrResults.join('\n');
+            }
+
+            if (!extractedText || extractedText.trim().length === 0) {
+                throw new Error('No text content could be extracted from the PDF');
+            }
+
+            const summaryPrompt = `
+                Analyze this educational content and provide a response in this exact JSON format:
+                {
+                    "topic": "specific topic name",
+                    "grade": "academic level",
+                    "subtopics": ["list", "of", "subtopics"],
+                    "mainConcepts": ["main", "concepts", "covered"]
+                }
+
+                Content to analyze:
+                "${extractedText.substring(0, 1500)}"
+
+                Note: Grade should be one of: Elementary/Middle School/High School/College
+            `;
+
+            const result = await model.generateContent(summaryPrompt);
+            const response = await result.response;
+            const responseText = response.text();
+
+            try {
+                const analysis = JSON.parse(responseText);
+                analysis.textPreview = extractedText.substring(0, 200);
+                analysis.numPages = pdfData.numpages;
+
+                console.log('Analysis completed:', {
+                    topic: analysis.topic,
+                    grade: analysis.grade
+                });
+
+                res.json(analysis);
+            } catch (parseError) {
+                console.error('Failed to parse AI response:', parseError);
+                
+                const fallbackAnalysis = {
+                    topic: extractedText.match(/^([^\n.!?]+)/)?.[1]?.trim() || "Unknown Topic",
+                    grade: "College",
+                    subtopics: [],
+                    mainConcepts: [],
+                    textPreview: extractedText.substring(0, 200),
+                    numPages: pdfData.numpages
+                };
+
+                res.json(fallbackAnalysis);
+            }
+
+        } catch (error) {
+            console.error('PDF processing error:', error);
+            res.status(500).json({ 
+                error: 'Error processing PDF file',
+                details: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            });
+        }
+    });
 });
 
 async function generateContent(taskId, topic, grade, type, stage) {
